@@ -11,8 +11,10 @@ see README.md
   - fork with OIDC autologin: https://github.com/m1n3rva/Onleiharr/tree/oidc_autologin
 - Container Engine: `podman`
 - Build: `bash buildimage.sh`
+- Build dev (OIDC fork): `bash buildimage.sh dev` → `dockerized-onleiharr-libgourou:dev`
 - Run:  `bash runimage.sh`
 - Smoke tests: `podman run --rm dockerized-onleiharr-libgourou:latest /tests/smoke.sh`
+- Dev smoke tests: `podman run --rm --entrypoint bash -e ONLEIHARR_SOURCE=git+https://github.com/m1n3rva/Onleiharr.git@oidc_autologin -v "$(pwd)/tests:/tests" dockerized-onleiharr-libgourou:dev /tests/smoke.sh`
 - CI workflows: `.github/workflows/auto-update.yml` (scheduled update), `.github/workflows/docker-publish.yml` (build/push)
 - Playwright + Chromium (for OIDC automated login): installed via `pipx inject onleiharr playwright` and `playwright install --with-deps chromium` in `Dockerfile:12-13`
 

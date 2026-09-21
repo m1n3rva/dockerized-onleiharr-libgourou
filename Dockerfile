@@ -1,13 +1,19 @@
+ARG DEBIAN_FRONTEND=noninteractive
+
 ARG LIBGOUROU_IMAGE=docker.io/bcliang/docker-libgourou:ubuntu
 FROM ${LIBGOUROU_IMAGE}
 
 ARG ONLEIHARR_VERSION=0.3.0b3
 
+ARG ONLEIHARR_SOURCE=onleiharr==${ONLEIHARR_VERSION}
+
 ARG IMAGE_SUFFIX=""
 
-RUN apt-get update && apt-get install -y pipx && apt-get clean
+ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
 
-RUN pipx install onleiharr==${ONLEIHARR_VERSION} && pipx ensurepath
+RUN apt-get update && apt-get install -y git pipx && apt-get clean
+
+RUN pipx install "${ONLEIHARR_SOURCE}" && pipx ensurepath
 
 # Install Playwright (for OIDC automated login) and Chromium browser.
 # Inject playwright into the onleiharr venv so its console scripts land

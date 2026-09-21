@@ -148,3 +148,40 @@ jobs:
         run: |
           git tag ${{ steps.version.outputs.git_tag }}
           git push origin ${{ steps.version.outputs.git_tag }}
+
+  build-and-push-dev:
+    runs-on: ubuntu-latest
+    needs: smoke-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract metadata (dev tags only)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=dev
+            type=sha,prefix=oidc-dev-
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push dev Docker image (OIDC fork)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          build-args: |
+            ONLEIHARR_SOURCE=git+https://github.com/m1n3rva/Onleiharr.git@oidc_autologin
+          tags: ${{ steps.meta.outputs.tags }}
