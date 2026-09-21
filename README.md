@@ -6,6 +6,32 @@ Onleiharr monitors Onleihe products and categories, sends notifications for new 
 
 ---
 
+## Table of Contents
+
+- [Quick Start](#quick-start)
+  - [Prerequisites](#prerequisites)
+  - [1. Get the Image](#1-get-the-image)
+  - [2. Configuration](#2-configuration)
+  - [3. Run the Service](#3-run-the-service)
+  - [4. Verify It's Running](#4-verify-its-running)
+- [Running as a Background Service](#running-as-a-background-service)
+  - [Docker Compose](#docker-compose)
+  - [Podman](#podman)
+  - [Systemd User Service](#systemd-user-service)
+- [Configuration Reference](#configuration-reference)
+  - [onleiharr.toml](#onleiharctoml)
+  - [Environment Overrides](#environment-overrides)
+- [Available Images](#available-images)
+- [Automated Updates](#automated-updates)
+- [Multiple Instances](#multiple-instances)
+- [Data Backup](#data-backup)
+- [Container Health Check](#container-health-check)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [License](#license)
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -77,7 +103,7 @@ timeout_secs = 30.0
 EOF
 ```
 
-Find your `library` and `library_id`:
+**Finding your `library` and `library_id`:**
 
 1. Open your library's Onleihe page: `https://www.onleihe.de/nbibXXX/frontend/myBib,0-0-0-100-0-0-0-0-0-0-0.html` (replace `nbibXXX` with your consortium code)
 2. Select your library and look at the URL — it contains `libraryId=YYY`
@@ -93,6 +119,18 @@ docker run --rm --name adept-init \
   ghcr.io/m1n3rva/dockerized-onleiharr-libgourou:latest \
   adept_activate --anonymous
 ```
+
+#### ⚠️ DRM Removal
+
+DRM removal is **disabled by default**. Enabling it requires two explicit config options:
+
+```toml
+[gourou]
+remove_drm = true
+remove_drm_ack = "I_UNDERSTAND"
+```
+
+This is not legal advice. You are responsible for verifying whether DRM removal for personal use is lawful in your jurisdiction. Onleiharr developers accept no liability for misuse. See the [Onleiharr README](https://github.com/nzb-tuxxx/Onleiharr) for details.
 
 ### 3. Run the Service
 
@@ -195,7 +233,7 @@ To stop:
 podman stop onleiharr && podman rm onleiharr
 ```
 
-### Systemd User Service (Podman)
+### Systemd User Service
 
 For a persistent system-level service, install a systemd user unit:
 
@@ -295,6 +333,104 @@ This repository includes an automated update workflow (`.github/workflows/auto-u
 - **Schedule**: Every Monday at 03:00 UTC, plus manual trigger via GitHub UI
 - **Smoke tests**: Verifies `onleiharr --help`, `onleiharr --version`, `acsmdownloader --help`, and `adept_activate --help` all exit 0
 - **Downgrade guard**: The workflow never downgrades a version; it only updates when a strictly newer version is available
+
+---
+
+## Multiple Instances
+
+To run multiple Onleiharr instances (e.g., for different libraries), use separate directories and container names:
+
+```yaml
+services:
+  onleiharr-berlin:
+    image: ghcr.io/m1n3rva/dockerized-onleiharr-libgourou:latest
+    container_name: onleiharr-berlin
+    restart: on-failure:5
+    volumes:
+      - ~/onleiharr/berlin/config:/config
+      - ~/onleiharr/berlin/downloads:/downloads
+    environment:
+      - TZ=Europe/Berlin
+
+  onleiharr-munich:
+    image: ghcr.io/m1n3rva/dockerized-onleiharr-libgourou:latest
+    container_name: onleiharr-munich
+    restart: on-failure:5
+    volumes:
+      - ~/onleiharr/munich/config:/config
+      - ~/onleiharr/munich/downloads:/downloads
+    environment:
+      - TZ=Europe/Berlin
+```
+
+```bash
+mkdir -p ~/onleiharr/{berlin,munich}/{config,downloads}
+docker compose up -d
+```
+
+---
+
+## Data Backup
+
+The following files and directories contain user data that should be backed up:
+
+| Path | Contents |
+|------|----------|
+| `~/onleiharr/config/onleiharr.toml` | Main configuration file (credentials, monitored URLs, etc.) |
+| `~/onleiharr/downloads/` | Downloaded ebooks (`.epub` files) |
+| `~/.config/adept/` | ADEPT license database (required for downloading DRM-protected ebooks) |
+
+To backup:
+
+```bash
+# Backup everything
+tar czf ~/onleiharr-backup-$(date +%Y%m%d).tar.gz \
+  ~/onleiharr/config/onleiharr.toml \
+  ~/onleiharr/downloads/ \
+  ~/.config/adept/
+
+# Restore
+tar xzf ~/onleiharr-backup-YYYYMMDD.tar.gz
+```
+
+**Note:** The ADEPT license (`~/.config/adept/`) is tied to the machine that created it. Restoring it on a different machine may require running `adept_activate --anonymous` again.
+
+---
+
+## Container Health Check
+
+To verify Onleiharr is functioning correctly:
+
+### Check the entrypoint responds
+
+```bash
+docker run --rm --entrypoint bash \
+  -v ~/onleiharr/config:/config \
+  ghcr.io/m1n3rva/dockerized-onleiharr-libgourou:latest \
+  -c 'onleiharr --version && acsmdownloader --help && adept_activate --help'
+```
+
+### Check a single run completes
+
+```bash
+docker run --rm \
+  -v ~/onleiharr/config:/config \
+  ghcr.io/m1n3rva/dockerized-onleiharr-libgourou:latest \
+  --once
+```
+
+### Check container uptime and restart count
+
+```bash
+docker inspect --format='{{.State.Status}} (restarts: {{.RestartCount}})' onleiharr
+# Example output: running (restarts: 0)
+```
+
+A high restart count indicates configuration issues — check the logs:
+
+```bash
+docker logs --tail 50 onleiharr
+```
 
 ---
 
