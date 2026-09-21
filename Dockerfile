@@ -1,4 +1,4 @@
-ARG LIBGOUROU_IMAGE
+ARG LIBGOUROU_IMAGE=docker.io/bcliang/docker-libgourou:ubuntu
 FROM ${LIBGOUROU_IMAGE}
 
 ARG ONLEIHARR_VERSION=0.3.0b3
