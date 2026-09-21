@@ -11,6 +11,8 @@ see README.md
 - Container Engine: `podman`
 - Build: `bash buildimage.sh` 
 - Run:  `bash runimage.sh`
+- Smoke tests: `podman run --rm dockerized-onleiharr-libgourou:latest /tests/smoke.sh`
+- CI workflows: `.github/workflows/auto-update.yml` (scheduled update), `.github/workflows/docker-publish.yml` (build/push)
 
 
 

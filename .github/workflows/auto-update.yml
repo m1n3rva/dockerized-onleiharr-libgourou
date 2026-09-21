@@ -1,0 +1,172 @@
+name: Auto-Update Dependencies
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"  # Every Monday at 03:00 UTC
+  workflow_dispatch:  # Manual trigger via GitHub UI
+
+jobs:
+  detect-and-bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect upstream versions
+        id: detect
+        run: |
+          set -euo pipefail
+
+          # --- Read current versions from Dockerfile ---
+          CURRENT_ONLEIHARR=$(grep '^ARG ONLEIHARR_VERSION=' Dockerfile | head -1 | sed 's/^ARG ONLEIHARR_VERSION=//')
+          echo "Current onleiharr version: ${CURRENT_ONLEIHARR}"
+
+          # --- Get latest stable onleiharr version from PyPI ---
+          # Only consider stable releases (no pre-release suffixes like b1, rc1, dev)
+          PIPPY_JSON=$(curl -sf https://pypi.org/pypi/onleiharr/json)
+          
+          # Get all releases sorted by upload time, find latest stable
+          LATEST_STABLE=$(echo "$PIPPY_JSON" | python3 -c "
+              import json, sys
+              from datetime import datetime
+
+              releases = json.load(sys.stdin)['releases']
+              
+              stable = []
+              for ver, files in releases.items():
+                  # Skip pre-releases: b, rc, a, dev, post
+                  import re
+                  if re.search(r'[brcad]\d+', ver):
+                      continue
+                  stable.append(ver)
+              
+              if not stable:
+                  print('')
+                  sys.exit(0)
+              
+              # Sort by version (simple sort works for semantic versions)
+              stable.sort(key=lambda v: [int(p) if p.isdigit() else p for p in v.split('.')])
+              print(stable[-1])
+          ")
+
+          if [ -z "$LATEST_STABLE" ]; then
+            echo "No stable onleiharr versions found on PyPI."
+            echo "needs_update=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Latest stable onleiharr version: ${LATEST_STABLE}"
+
+          # --- Version comparison (no downgrades) ---
+          CAN_UPGRADE=$(python3 -c "
+              from packaging.version import Version
+              current = Version('${CURRENT_ONLEIHARR}')
+              latest = Version('${LATEST_STABLE}')
+              print('true' if latest > current else 'false')
+          " 2>/dev/null || echo "false")
+
+          if [ "$CAN_UPGRADE" = "false" ]; then
+            echo "No upgrade needed. Current (${CURRENT_ONLEIHARR}) >= stable (${LATEST_STABLE})."
+            echo "needs_update=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "needs_update=true" >> "$GITHUB_OUTPUT"
+          echo "new_onleiharr_version=${LATEST_STABLE}" >> "$GITHUB_OUTPUT"
+          echo "CURRENT_ONLEIHARR=${CURRENT_ONLEIHARR}" >> "$GITHUB_OUTPUT"
+
+      - name: Check base image digest
+        id: digest
+        run: |
+          set -euo pipefail
+          
+          # Resolve the latest digest for docker.io/bcliang/docker-libgourou:ubuntu
+          DIGEST=$(skopeo inspect --format '{{.Digest}}' docker://docker.io/bcliang/docker-libgourou:ubuntu 2>/dev/null || echo "")
+          
+          if [ -z "$DIGEST" ]; then
+            echo "Could not resolve base image digest via skopeo. Trying Docker Hub API..."
+            TAG_RESPONSE=$(curl -sf "https://hub.docker.com/v2/repositories/bcliang/docker-libgourou/tags/ubuntu" 2>/dev/null || echo "{}")
+            LATEST_DIGEST=$(echo "$TAG_RESPONSE" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('digest',''))" 2>/dev/null || echo "")
+            DIGEST="${LATEST_DIGEST}"
+          fi
+
+          if [ -z "$DIGEST" ]; then
+            echo "WARNING: Could not resolve base image digest. Skipping digest tracking."
+            echo "digest=" >> "$GITHUB_OUTPUT"
+          else
+            echo "Base image digest: ${DIGEST}"
+            echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump versions in Dockerfile
+        if: steps.detect.outputs.needs_update == 'true'
+        run: |
+          set -euo pipefail
+          
+          NEW_ONLEIHARR="${{ steps.detect.outputs.new_onleiharr_version }}"
+          CURRENT="${{ steps.detect.outputs.CURRENT_ONLEIHARR }}"
+          
+          # Update onleiharr version ARG
+          sed -i "s/^ARG ONLEIHARR_VERSION=.*/ARG ONLEIHARR_VERSION=${NEW_ONLEIHARR}/" Dockerfile
+          
+          echo "Bumped onleiharr: ${CURRENT} -> ${NEW_ONLEIHARR}"
+          echo "Dockerfile updated:"
+          grep -E '^ARG' Dockerfile
+
+      - name: Run smoke test on updated image
+        if: steps.detect.outputs.needs_update == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          load: true
+          tags: smoke-test:latest
+          build-args: |
+            ONLEIHARR_VERSION=${{ steps.detect.outputs.new_onleiharr_version }}
+            LIBGOUROU_IMAGE=docker.io/bcliang/docker-libgourou@${{ steps.digest.outputs.digest }}
+
+      - name: Execute smoke tests
+        if: steps.detect.outputs.needs_update == 'true'
+        run: |
+          chmod +x tests/smoke.sh
+          docker run --rm smoke-test:latest /tests/smoke.sh
+
+      - name: Push to GHCR
+        if: steps.detect.outputs.needs_update == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:auto-update-${{ github.run_number }}
+            ghcr.io/${{ github.repository }}:latest
+          build-args: |
+            ONLEIHARR_VERSION=${{ steps.detect.outputs.new_onleiharr_version }}
+            LIBGOUROU_IMAGE=docker.io/bcliang/docker-libgourou@${{ steps.digest.outputs.digest }}
+          labels: |
+            org.opencontainers.image.description=Auto-updated Onleiharr + libgourou image
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Commit version bump
+        if: steps.detect.outputs.needs_update == 'true'
+        run: |
+          set -euo pipefail
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add Dockerfile tests/smoke.sh
+          
+          NEW_ONLEIHARR="${{ steps.detect.outputs.new_onleiharr_version }}"
+          CURRENT="${{ steps.detect.outputs.CURRENT_ONLEIHARR }}"
+          
+          git commit -m "chore(deps): bump onleiharr ${CURRENT} -> ${NEW_ONLEIHARR}" || echo "No changes to commit"
+          
+          # Push if we have local changes
+          if ! git diff --quiet HEAD; then
+            git push
+          fi

@@ -1,8 +1,10 @@
-# TODO: pin the docker-libgourou version to ensure consitent behavior
-FROM docker.io/bcliang/docker-libgourou:ubuntu
+ARG LIBGOUROU_IMAGE
+FROM ${LIBGOUROU_IMAGE}
+
+ARG ONLEIHARR_VERSION=0.3.0b3
 
 RUN apt-get update && apt-get install -y pipx && apt-get clean
-RUN pipx install onleiharr==0.3.0b3 && pipx ensurepath
+RUN pipx install onleiharr==${ONLEIHARR_VERSION} && pipx ensurepath
 
 ENV PATH="/root/.local/bin:${PATH}"
 
