@@ -8,7 +8,7 @@ mkdir -p $SCRIPT_DIR/onleiharr/{config,downloads}
 podman run \
   --replace \
   --name onleiharr \
-  --restart unless-stopped \
+  --restart on-failure:5 \
   -v $SCRIPT_DIR/onleiharr/config:/config \
   -v $SCRIPT_DIR/onleiharr/downloads:/downloads \
   -it \
