@@ -32,7 +32,7 @@ jobs:
       - name: Run smoke tests
         run: |
           chmod +x tests/smoke.sh
-          docker run --rm smoke-test:latest /tests/smoke.sh
+          docker run --rm --entrypoint bash smoke-test:latest /tests/smoke.sh
 
   build-and-push:
     runs-on: ubuntu-latest
