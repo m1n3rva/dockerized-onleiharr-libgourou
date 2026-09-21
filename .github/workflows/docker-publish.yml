@@ -8,7 +8,13 @@ on:
       - 'tests/**'
       - '.github/workflows/docker-publish.yml'
     tags: [ 'v*.*.*' ]
-  workflow_dispatch: # Erlaubt manuelles Starten via GitHub UI
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'Dockerfile'
+      - 'tests/**'
+      - '.github/workflows/docker-publish.yml'
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -32,11 +38,12 @@ jobs:
       - name: Run smoke tests
         run: |
           chmod +x tests/smoke.sh
-          docker run --rm --entrypoint bash smoke-test:latest /tests/smoke.sh
+          docker run --rm --entrypoint bash -v "${GITHUB_WORKSPACE}/tests:/tests" smoke-test:latest /tests/smoke.sh
 
   build-and-push:
     runs-on: ubuntu-latest
     needs: smoke-test
+    if: github.event_name == 'push'
     permissions:
       contents: read
       packages: write
