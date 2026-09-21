@@ -297,20 +297,28 @@ Override config values with environment variables:
 
 ## Available Images
 
-The image is built and published automatically. See the [Automated Updates](#automated-updates) section for details.
-
-| Tag | Description |
-|-----|-------------|
-| `latest` | Latest stable build (updated automatically) |
-| `auto-update-{run_number}` | Each auto-update run gets a unique tag for rollback |
-| `sha-{commit}` | Build tied to a specific repository commit |
-| `main` | Build from the `main` branch |
-
-Pull the latest:
+The image is built and published automatically via CI. Pull the latest:
 
 ```bash
 docker pull ghcr.io/m1n3rva/dockerized-onleiharr-libgourou:latest
 ```
+
+### Version Schema
+
+Images use a composite version: `{onleiharr_version}[-{suffix}]-{revision}`
+
+| Tag | Example | Description |
+|-----|---------|-------------|
+| `{onleiharr_version}-{revision}` | `0.3.0-1` | Full version — pin to exact build |
+| `{onleiharr_version}` | `0.3.0` | Latest revision of this onleiharr version |
+| `latest` | `latest` | Always the newest build |
+| `sha-{commit}` | `sha-e3b0c44` | Build tied to a specific commit |
+
+- **revision** — auto-incremented per onleiharr version; resets to `1` when onleiharr or suffix changes
+- **suffix** — optional marker for local container changes (set via `ARG IMAGE_SUFFIX` in `Dockerfile`); e.g., `0.3.0-container-2`
+- Pre-release onleiharr versions (beta, rc, alpha) skip version tagging; only `latest` + `sha-*` are pushed until a stable version is available
+
+Git tags follow the same scheme with a `v` prefix (e.g., `v0.3.0-1`).
 
 ---
 
@@ -318,17 +326,26 @@ docker pull ghcr.io/m1n3rva/dockerized-onleiharr-libgourou:latest
 
 This repository includes an automated update workflow (`.github/workflows/auto-update.yml`) that:
 
-- **Checks** for new versions of `onleiharr` (from PyPI) and the base image (`bcliang/docker-libgourou:ubuntu`)
-- **Bumps** the pinned versions in `Dockerfile` via a commit to `main`
-- **Builds** the image with the new versions and runs smoke tests
+- **Checks** for new stable versions of `onleiharr` (from PyPI)
+- **Bumps** the pinned version in `Dockerfile` via a pull request
+- **Runs smoke tests** on the updated image
+- **Auto-merges** the PR if tests pass, triggering a build with the new version tag
 - **Pushes** the updated image to GitHub Container Registry (GHCR)
+
+### Version Tagging
+
+When the merged changes are pushed to `main`, the CI workflow automatically:
+
+1. Computes the next version based on the `ONLEIHARR_VERSION` and `IMAGE_SUFFIX` in `Dockerfile`
+2. Builds and pushes the image with the computed version tag
+3. Creates a lightweight git tag (`v{version}`) for the release
 
 ### Update Policy
 
 | Dependency | Source | Policy |
 |---|---|---|
 | `onleiharr` | PyPI (pypi.org) | Stable releases only (no pre-releases) |
-| Base image (`bcliang/docker-libgourou:ubuntu`) | Docker Hub | Digest-pinned from the `ubuntu` tag |
+| Base image (`bcliang/docker-libgourou:ubuntu`) | Docker Hub | `ubuntu` tag |
 
 - **Schedule**: Every Monday at 03:00 UTC, plus manual trigger via GitHub UI
 - **Smoke tests**: Verifies `onleiharr --help`, `onleiharr --version`, `acsmdownloader --help`, and `adept_activate --help` all exit 0

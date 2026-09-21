@@ -3,6 +3,8 @@ FROM ${LIBGOUROU_IMAGE}
 
 ARG ONLEIHARR_VERSION=0.3.0b3
 
+ARG IMAGE_SUFFIX=""
+
 RUN apt-get update && apt-get install -y pipx && apt-get clean
 RUN pipx install onleiharr==${ONLEIHARR_VERSION} && pipx ensurepath
 
