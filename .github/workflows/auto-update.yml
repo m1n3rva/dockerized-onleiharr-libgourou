@@ -93,7 +93,7 @@ jobs:
         if: steps.detect.outputs.needs_update == 'true'
         run: |
           chmod +x tests/smoke.sh
-          docker run --rm --entrypoint bash smoke-test:latest /tests/smoke.sh
+          docker run --rm --entrypoint bash -v "${GITHUB_WORKSPACE}/tests:/tests" smoke-test:latest /tests/smoke.sh
 
       - name: Create pull request
         if: steps.detect.outputs.needs_update == 'true'
