@@ -23,6 +23,7 @@ Onleiharr monitors Onleihe products and categories, sends notifications for new 
   - [External library login (OpenID)](#external-library-login-openid)
   - [Environment Overrides](#environment-overrides)
 - [Available Images](#available-images)
+- [Development Image (OIDC beta)](#development-image-oidc-beta)
 - [Automated Updates](#automated-updates)
 - [Multiple Instances](#multiple-instances)
 - [Data Backup](#data-backup)
@@ -374,6 +375,26 @@ Images use a composite version: `{onleiharr_version}[-{suffix}]-{revision}`
 
 Git tags follow the same scheme with a `v` prefix (e.g., `v0.3.0-1`).
 
+### Development Image (OIDC beta)
+
+A development image (`:dev`) is automatically built from the `oidc_autologin` fork of Onleiharr. It includes the latest OIDC external-auth features (e.g., `onleiharr.external_auth`) that may not yet be on PyPI.
+
+Pull the dev image:
+
+```bash
+docker pull ghcr.io/m1n3rva/dockerized-onleiharr-libgourou:dev
+# or by commit sha
+docker pull ghcr.io/m1n3rva/dockerized-onleiharr-libgourou:oidc-dev-{sha}
+```
+
+Build locally:
+
+```bash
+./buildimage.sh dev
+```
+
+The dev image is tagged as `dev` on every push to `main` and also has a `oidc-dev-{sha}` tag for reproducibility. Use it to test new OIDC features before they reach a stable release.
+
 ---
 
 ## Automated Updates
@@ -402,7 +423,7 @@ When the merged changes are pushed to `main`, the CI workflow automatically:
 | Base image (`bcliang/docker-libgourou:ubuntu`) | Docker Hub | `ubuntu` tag |
 
 - **Schedule**: Every Monday at 03:00 UTC, plus manual trigger via GitHub UI
-- **Smoke tests**: Verifies `onleiharr --help`, `onleiharr --version`, `acsmdownloader --help`, `adept_activate --help`, Playwright + `onleiharr.external_auth` imports, and that the Chromium browser binary is present
+- **Smoke tests**: Verifies `onleiharr --help`, `onleiharr --version`, `acsmdownloader --help`, `adept_activate --help`, Playwright + `onleiharr.external_auth` imports (dev builds fail on missing `external_auth`; stable builds skip it), and that the Chromium browser binary is present
 - **Downgrade guard**: The workflow never downgrades a version; it only updates when a strictly newer version is available
 
 ---
@@ -577,6 +598,18 @@ Or run them via the provided build script with an override:
 ```bash
 podman build -t smoke-test .
 podman run --rm smoke-test /tests/smoke.sh
+```
+
+### Build the dev image (OIDC fork)
+
+To build and test against the OIDC autologin fork:
+
+```bash
+./buildimage.sh dev
+podman run --rm --entrypoint bash \
+  -e ONLEIHARR_SOURCE=git+https://github.com/m1n3rva/Onleiharr.git@oidc_autologin \
+  -v "$(pwd)/tests:/tests" \
+  dockerized-onleiharr-libgourou:dev /tests/smoke.sh
 ```
 
 ---

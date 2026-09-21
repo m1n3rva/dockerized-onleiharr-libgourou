@@ -60,12 +60,24 @@ else
 fi
 
 # 6. Onleiharr external_auth module is present (OIDC autologin).
-# This module only exists in onleiharr >=0.3.0 with OIDC support; skip if absent.
-if [ -n "${ONLEIHARR_VENV:-}" ] && \
-   "${ONLEIHARR_VENV}/bin/python" -c "import onleiharr.external_auth" 2>/dev/null; then
+# In dev builds (ONLEIHARR_SOURCE contains git+): hard fail if missing.
+# In stable builds: skip if absent (OIDC feature not yet released on PyPI).
+_IS_DEV=false
+if echo "${ONLEIHARR_SOURCE:-}" | grep -q '^git+'; then
+  _IS_DEV=true
+fi
+if [ "$_IS_DEV" = "true" ]; then
+  if [ -n "${ONLEIHARR_VENV:-}" ] && \
+     "${ONLEIHARR_VENV}/bin/python" -c "import onleiharr.external_auth" 2>/dev/null; then
     pass "onleiharr.external_auth present"
+  else
+    fail "onleiharr.external_auth missing (dev build requires it)"
+  fi
+elif [ -n "${ONLEIHARR_VENV:-}" ] && \
+     "${ONLEIHARR_VENV}/bin/python" -c "import onleiharr.external_auth" 2>/dev/null; then
+  pass "onleiharr.external_auth present"
 else
-    echo "[SKIP] onleiharr.external_auth not present (OIDC feature not yet released)"
+  echo "[SKIP] onleiharr.external_auth not present (OIDC feature not yet released)"
 fi
 
 # 7. Chromium browser binary is installed (OIDC autologin).
