@@ -6,7 +6,19 @@ ARG ONLEIHARR_VERSION=0.3.0b3
 ARG IMAGE_SUFFIX=""
 
 RUN apt-get update && apt-get install -y pipx && apt-get clean
+
 RUN pipx install onleiharr==${ONLEIHARR_VERSION} && pipx ensurepath
+
+# Install Playwright (for OIDC automated login) and Chromium browser.
+# Inject playwright into the onleiharr venv so its console scripts land
+# in /root/.local/bin (already on PATH via pipx ensurepath).
+# --with-deps installs the system libraries Chromium needs at build time.
+# Use the venv Python directly since injected console scripts may not
+# appear in /root/.local/bin (pipx inject installs packages, not always apps).
+# Set PLAYWRIGHT_BROWSERS_PATH BEFORE install so the browser caches there.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN pipx inject onleiharr playwright && \
+    /root/.local/pipx/venvs/onleiharr/bin/python -m playwright install --with-deps chromium
 
 ENV PATH="/root/.local/bin:${PATH}"
 

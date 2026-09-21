@@ -20,6 +20,7 @@ Onleiharr monitors Onleihe products and categories, sends notifications for new 
   - [Systemd User Service](#systemd-user-service)
 - [Configuration Reference](#configuration-reference)
   - [onleiharr.toml](#onleiharctoml)
+  - [External library login (OpenID)](#external-library-login-openid)
   - [Environment Overrides](#environment-overrides)
 - [Available Images](#available-images)
 - [Automated Updates](#automated-updates)
@@ -75,7 +76,9 @@ docker run --rm -it \
   --init-config
 ```
 
-Fill in your Onleihe credentials (`username`, `password`, `library`, `library_id`) and the URLs of pages you want to monitor.
+Fill in your Onleihe credentials (`username`, `password`, `library`, `library_id`) and the pages you want to monitor.
+
+For external-library authentication (e.g. Münchner Stadtbibliothek), run `--init-config` and choose the OpenID flow when prompted. The wizard writes `auth_type = "open_id"` and `session_path = "session.json"` instead of `username`/`password`.
 
 Alternatively, create the file manually:
 
@@ -83,17 +86,28 @@ Alternatively, create the file manually:
 cat > ~/onleiharr/config/onleiharr.toml << 'EOF'
 [general]
 poll_interval_secs = 300.0
-urls = [
-  "https://www.onleihe.de/nbib24/frontend/versionInfoList,0-0-0-109-0-0-0-2008-400005-812926447-0.html",  # magazine example
+watch_product_ids = [
+  "69b3ed6bc56755bf97cb3b9a",  # product or magazine series
 ]
-keywords = [
-  "my-magazine",
+
+[[watch_categories]]
+description = "Sachbuch & Ratgeber"
+category_ids = [
+  "65afa17e40246d5939bdbb53",
 ]
+keywords = ["python"]
 
 [notification]
 # Uncomment and configure to receive notifications:
 # urls = ["tgram://{bot_token}/{chat_id}/?format=html"]  # Telegram
 # urls = ["discord://{webhook_url}"]  # Discord
+
+[credentials]
+host = "niedersachsen.onleihe.de"
+onleihe_name = "Onleihe Niedersachsen"
+library_name = "Stadtbibliothek Achim"
+username = "your-username"
+password = "your-password"
 
 [gourou]
 bin_dir = "/usr/local/bin"
@@ -120,7 +134,35 @@ docker run --rm --name adept-init \
   adept_activate --anonymous
 ```
 
-#### ⚠️ DRM Removal
+### External library login (OpenID)
+
+Libraries such as the Münchner Stadtbibliothek redirect authentication to their own identity provider. The image ships with **Playwright + Chromium** so the watcher can perform unattended OIDC login automatically when the session expires.
+
+The config wizard (`--init-config`) detects external-login libraries and writes:
+
+```toml
+[credentials]
+host = "ssl.muenchen.de"
+auth_type = "open_id"
+session_path = "session.json"
+# no username / password here
+```
+
+The `session.json` file must live in the same mounted `/config` directory. Onleiharr refreshes it automatically; if refresh fails, it sends an Apprise notification with the exact `onleiharr --login` command.
+
+Currently supported providers (exact hostname match):
+- `ssl.muenchen.de` — Münchner Stadtbibliothek
+
+For an external-login library, the wizard writes `auth_type = "open_id"` and `session_path = "session.json"` instead of `username` and `password`.
+
+Environment overrides:
+
+| Variable | Description |
+|----------|-------------|
+| `ONLEIHARR_AUTH_TYPE` | Override auth type (`password` or `open_id`) |
+| `ONLEIHARR_SESSION_PATH` | Path (relative to config dir) for the session file |
+
+### ⚠️ DRM Removal
 
 DRM removal is **disabled by default**. Enabling it requires two explicit config options:
 
@@ -264,9 +306,17 @@ journalctl --user -u onleiharr -f
 
 | Section | Key | Description | Default |
 |---------|-----|-------------|---------|
-| `[general]` | `poll_interval_secs` | How often to poll monitored URLs | `300.0` |
-| | `urls` | List of Onleihe pages to monitor | *(required)* |
-| | `keywords` | Keywords to trigger auto-lend | `[]` |
+| `[general]` | `poll_interval_secs` | How often to poll monitored products/categories | `300.0` |
+| | `watch_product_ids` | Direct product or series watches | `[]` |
+| `[[watch_categories]]` | `description` | Human-readable category label | *(required)* |
+| | `category_ids` | Onleihe v3 category IDs | `[]` |
+| | `category_urls` | Category search URLs (IDs extracted automatically) | `[]` |
+| | `keywords` | Keywords to trigger auto-lend on category matches | `[]` |
+| | `sort_field` | Sort order: `licence.stockChangedTimestamp` or `publicationDate` | `licence.stockChangedTimestamp` |
+| `[credentials]` | `host` | Onleihe host (e.g. `niedersachsen.onleihe.de`) | — |
+| | `library_name` | Library name | — |
+| | `auth_type` | `password` or `open_id` | `password` |
+| | `username` / `password` | Onleihe credentials (use with `auth_type = "password"`) | — |
 | `[notification]` | `urls` | Apprise notification URLs | *(optional)* |
 | | `test_notification` | Send a test notification on startup | `false` |
 | `[gourou]` | `bin_dir` | Path to libgourou binaries | `/usr/local/bin` |
@@ -285,9 +335,11 @@ Override config values with environment variables:
 | Variable | Description |
 |----------|-------------|
 | `ONLEIHARR_CONFIG` | Custom path to `onleiharr.toml` |
-| `ONLEIHARR_URLS` | Comma-separated list of monitored URLs |
 | `ONLEIHARR_USERNAME`, `ONLEIHARR_PASSWORD` | Onleihe credentials |
-| `ONLEIHARR_LIBRARY`, `ONLEIHARR_LIBRARY_ID` | Library identifier |
+| `ONLEIHARR_HOST`, `ONLEIHARR_ONLEIHE_NAME` | Onleihe host and display name |
+| `ONLEIHARR_LIBRARY_NAME`, `ONLEIHARR_LIBRARY_ID` | Library identifier |
+| `ONLEIHARR_AUTH_TYPE`, `ONLEIHARR_SESSION_PATH` | OIDC auth type and session file path |
+| `ONLEIHARR_WATCH_PRODUCT_IDS` | Space-separated product/series IDs |
 | `ONLEIHARR_POLL_INTERVAL` | Override poll interval (seconds) |
 | `ONLEIHARR_GOUROU_BIN_DIR` | Override libgourou binary directory |
 | `ONLEIHARR_GOUROU_DOWNLOAD_DIR` | Override download directory |
@@ -302,6 +354,8 @@ The image is built and published automatically via CI. Pull the latest:
 ```bash
 docker pull ghcr.io/m1n3rva/dockerized-onleiharr-libgourou:latest
 ```
+
+**Image size** includes Playwright and Chromium (~600–800 MB) to support automated OIDC login for external libraries (e.g. Münchner Stadtbibliothek). If you only need password-based auth, you can pin to an older image tag that predates the Playwright dependency.
 
 ### Version Schema
 
@@ -348,7 +402,7 @@ When the merged changes are pushed to `main`, the CI workflow automatically:
 | Base image (`bcliang/docker-libgourou:ubuntu`) | Docker Hub | `ubuntu` tag |
 
 - **Schedule**: Every Monday at 03:00 UTC, plus manual trigger via GitHub UI
-- **Smoke tests**: Verifies `onleiharr --help`, `onleiharr --version`, `acsmdownloader --help`, and `adept_activate --help` all exit 0
+- **Smoke tests**: Verifies `onleiharr --help`, `onleiharr --version`, `acsmdownloader --help`, `adept_activate --help`, Playwright + `onleiharr.external_auth` imports, and that the Chromium browser binary is present
 - **Downgrade guard**: The workflow never downgrades a version; it only updates when a strictly newer version is available
 
 ---

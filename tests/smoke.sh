@@ -43,6 +43,39 @@ else
     fail "adept_activate --help failed"
 fi
 
+# 5. Playwright is installed and importable (OIDC autologin prerequisite).
+ONLEIHARR_VENV=$(pipx list --json 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for name, info in data.get('venvs', {}).items():
+    if name == 'onleiharr':
+        print('/root/.local/pipx/venvs/' + name)
+        break
+")
+if [ -n "${ONLEIHARR_VENV:-}" ] && \
+   "${ONLEIHARR_VENV}/bin/python" -c "import playwright" 2>/dev/null; then
+    pass "playwright importable"
+else
+    fail "playwright import failed"
+fi
+
+# 6. Onleiharr external_auth module is present (OIDC autologin).
+# This module only exists in onleiharr >=0.3.0 with OIDC support; skip if absent.
+if [ -n "${ONLEIHARR_VENV:-}" ] && \
+   "${ONLEIHARR_VENV}/bin/python" -c "import onleiharr.external_auth" 2>/dev/null; then
+    pass "onleiharr.external_auth present"
+else
+    echo "[SKIP] onleiharr.external_auth not present (OIDC feature not yet released)"
+fi
+
+# 7. Chromium browser binary is installed (OIDC autologin).
+if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && \
+   find "${PLAYWRIGHT_BROWSERS_PATH}" -path "*/chrome-linux64/chrome" -type f 2>/dev/null | head -1 | grep -q .; then
+     pass "chromium browser present"
+else
+     fail "chromium browser missing"
+fi
+
 echo ""
 echo "Results: ${PASSED} passed, ${FAILED} failed"
 
