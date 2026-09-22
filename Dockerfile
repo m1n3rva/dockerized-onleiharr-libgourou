@@ -13,18 +13,17 @@ ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
 
 RUN apt-get update && apt-get install -y git pipx && apt-get clean
 
-RUN pipx install "${ONLEIHARR_SOURCE}" && pipx ensurepath
-
-# Install Playwright (for OIDC automated login) and Chromium browser.
-# Inject playwright into the onleiharr venv so its console scripts land
-# in /root/.local/bin (already on PATH via pipx ensurepath).
-# --with-deps installs the system libraries Chromium needs at build time.
-# Use the venv Python directly since injected console scripts may not
-# appear in /root/.local/bin (pipx inject installs packages, not always apps).
-# Set PLAYWRIGHT_BROWSERS_PATH BEFORE install so the browser caches there.
+# Playwright + Chromium browser — heavy (~300MB), rarely changes.
+# Install in a standalone venv first so the browser download is cached
+# regardless of ONLEIHARR_SOURCE changes (stable vs dev builds).
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN pipx inject onleiharr playwright && \
-    /root/.local/pipx/venvs/onleiharr/bin/python -m playwright install --with-deps chromium
+RUN pipx install playwright && \
+    /root/.local/pipx/venvs/playwright/bin/python -m playwright install --with-deps chromium
+
+# Onleiharr — changes between stable/dev builds.
+# Inject playwright into the venv; browsers already cached in /ms-playwright.
+RUN pipx install "${ONLEIHARR_SOURCE}" && pipx ensurepath
+RUN pipx inject onleiharr playwright
 
 ENV PATH="/root/.local/bin:${PATH}"
 
