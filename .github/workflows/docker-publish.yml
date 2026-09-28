@@ -5,12 +5,14 @@ on:
     branches: [ "main" ]
     paths:
       - 'Dockerfile'
+      - '.gitignore'
       - 'tests/**'
       - '.github/workflows/docker-publish.yml'
   pull_request:
     branches: [ "main" ]
     paths:
       - 'Dockerfile'
+      - '.gitignore'
       - 'tests/**'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:

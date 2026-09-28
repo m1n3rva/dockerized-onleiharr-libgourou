@@ -1,2 +1,5 @@
 # local config data for testing
 /onleiharr
+
+# local CLI tools
+bin/
