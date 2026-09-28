@@ -25,21 +25,22 @@ jobs:
 
           PIPPY_JSON=$(curl -sf https://pypi.org/pypi/onleiharr/json)
           
-          LATEST_STABLE=$(echo "$PIPPY_JSON" | python3 -c "
-              import json, sys
-              import re
-              releases = json.load(sys.stdin)['releases']
-              stable = []
-              for ver, files in releases.items():
-                  if re.search(r'[brcad]\d+', ver):
-                      continue
-                  stable.append(ver)
-              if not stable:
-                  print('')
-                  sys.exit(0)
-              stable.sort(key=lambda v: [int(p) if p.isdigit() else p for p in v.split('.')])
-              print(stable[-1])
-          ")
+          LATEST_STABLE=$(echo "$PIPPY_JSON" | python3 << 'PYEOF'
+import json, sys
+import re
+releases = json.load(sys.stdin)['releases']
+stable = []
+for ver, files in releases.items():
+    if re.search(r'[brcad]\d+', ver):
+        continue
+    stable.append(ver)
+if not stable:
+    print('')
+    sys.exit(0)
+stable.sort(key=lambda v: [int(p) if p.isdigit() else p for p in v.split('.')])
+print(stable[-1])
+PYEOF
+)
 
           if [ -z "$LATEST_STABLE" ]; then
             echo "No stable onleiharr versions found on PyPI."
