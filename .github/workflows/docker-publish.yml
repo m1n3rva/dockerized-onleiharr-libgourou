@@ -7,14 +7,14 @@ on:
       - 'Dockerfile'
       - '.gitignore'
       - 'tests/**'
-      - '.github/workflows/docker-publish.yml'
+      - '.github/workflows/**'
   pull_request:
     branches: [ "main" ]
     paths:
       - 'Dockerfile'
       - '.gitignore'
       - 'tests/**'
-      - '.github/workflows/docker-publish.yml'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 env:
